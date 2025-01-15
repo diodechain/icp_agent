@@ -26,7 +26,7 @@ defmodule ICPAgent.MixProject do
       {:cbor, "~> 1.0"},
       {:jason, "~> 1.4"},
       {:ex_sha3, "~> 0.1.1"},
-      {:finch, "~> 0.13.0"}
+      {:req, "~> 0.5.8"}
     ]
   end
 end

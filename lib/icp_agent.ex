@@ -6,7 +6,8 @@ defmodule ICPAgent do
   end
 
   def default_host() do
-    "http://127.0.0.1:4943"
+    # "http://127.0.0.1:4943"
+    "https://ic0.app"
   end
 
   def host() do
@@ -133,14 +134,23 @@ defmodule ICPAgent do
     payload = CBOR.encode(opayload)
     {:ok, _decoded, ""} = CBOR.decode(payload)
 
+    timeout = 15_000
+
+    opts =
+      [
+        url: host,
+        method: method,
+        receive_timeout: timeout,
+        connect_options: [timeout: timeout],
+        headers: [content_type: "application/cbor"] ++ headers
+      ]
+
     {:ok, ret} =
-      Finch.build(
-        method,
-        host,
-        [{"Content-Type", "application/cbor"}] ++ headers,
-        if(method == :post, do: payload)
-      )
-      |> Finch.request(TestFinch)
+      case method do
+        :get -> Req.new(opts)
+        :post -> Req.new([body: payload] ++ opts)
+      end
+      |> Req.request()
 
     p1 = System.os_time(:millisecond)
 

@@ -70,12 +70,6 @@ defmodule ICPAgentTest do
     # [200] = call(canister_id, w, "update_identity_role", [:blob, :blob], [Wallet.pubkey_long!(w), identity_contract])
     # # test_batch_write(w, canister_id)
 
-    # %{"certified_height" => height, "replica_health_status" => "healthy", "root_key" => root_key} =
-    #   status()
-
-    # IO.puts("certified_height: #{height}")
-    # IO.puts("root_key: #{inspect(Base.encode16(root_key.value))}")
-
     # [n] = query(canister_id, w, "get_max_message_id")
 
     # message = "hello diode #{n}"
@@ -89,5 +83,22 @@ defmodule ICPAgentTest do
     # isOk(call(canister_id, w, "add_message", [:blob, :blob], [key_id, message]))
     # n3 = n2 + 1
     # [^n3] = query(canister_id, w, "get_max_message_id")
+  end
+
+  test "status" do
+    %{"replica_health_status" => "healthy", "root_key" => root_key} =
+      ICPAgent.status()
+
+    IO.puts("root_key: #{inspect(Base.encode16(root_key.value))}")
+    assert Base.encode16(root_key.value) == "308182301D060D2B0601040182DC7C0503010201060C2B0601040182DC7C05030201036100814C0E6EC71FAB583B08BD81373C255C3C371B2E84863C98A4F1E08B74235D14FB5D9C0CD546D9685F913A0C0B2CC5341583BF4B4392E467DB96D65B9BB4CB717112F8472E0D5A4D14505FFD7484B01291091C5F87B98883463F98091A0BAAAE"
+  end
+
+  test "query sns" do
+    # https://internetcomputer.org/docs/current/developer-docs/smart-contracts/advanced-features/system-canisters
+    address = "qaa6y-5yaaa-aaaaa-aaafa-cai"
+    # https://github.com/dfinity/ic/blob/master/rs/nns/sns-wasm/canister/sns-wasm.did
+    method = "get_latest_sns_version_pretty"
+    [version] = ICPAgent.query(address, Wallet.new(), method)
+    IO.inspect(Map.new(version), label: "sns latest version")
   end
 end
