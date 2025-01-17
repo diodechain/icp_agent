@@ -86,6 +86,7 @@ defmodule ICPAgent do
     |> mapify()
   end
 
+  defp mapify([{key, value}]), do: %{key => mapify(value)}
   defp mapify(list) when is_list(list), do: Enum.map(list, &mapify/1) |> Map.new()
   defp mapify({key, value}), do: {key, mapify(value)}
   defp mapify(other), do: other
