@@ -100,6 +100,12 @@ defmodule ICPAgent do
 
   @doc """
   This function queries a canister using the ICP query protocol.
+
+  # Example:
+
+  ```elixir
+  > [versions] = ICPAgent.query("qaa6y-5yaaa-aaaaa-aaafa-cai", DiodeClient.Wallet.new(), "get_latest_sns_version_pretty")
+  ```
   """
   def query(canister_id, wallet, method, types \\ [], args \\ []) do
     {_request_id, query} =
