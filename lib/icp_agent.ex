@@ -184,7 +184,7 @@ defmodule ICPAgent do
   end
 
   def print_requests?() do
-    :persistent_term.get(:print_requests?, true)
+    System.get_env("ICP_PRINT_REQUESTS", "false") == "true"
   end
 
   @doc """
