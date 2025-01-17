@@ -60,23 +60,27 @@ defmodule ICPAgent do
         "arg" => cbor_bytes(Candid.encode_parameters(types, args))
       })
 
-    ret = curl("#{host()}/api/v3/canister/#{canister_id}/call", query)
+    curl("#{host()}/api/v3/canister/#{canister_id}/call", query)
+    |> case do
+      ret = {:error, _err} ->
+        ret
 
-    if ret["status"] == "replied" do
-      # read_state(canister_id, wallet, [["request_status", cbor_bytes(request_id), "reply"]])
-      {:ok, %{value: value}, ""} = CBOR.decode(ret["certificate"].value)
-      tree = flatten_tree(value["tree"])
+      ret = %{"status" => "replied"} ->
+        # read_state(canister_id, wallet, [["request_status", cbor_bytes(request_id), "reply"]])
+        {:ok, %{value: value}, ""} = CBOR.decode(ret["certificate"].value)
+        tree = flatten_tree(value["tree"])
 
-      reply = tree["request_status"][request_id]["reply"]
+        reply = tree["request_status"][request_id]["reply"]
 
-      if reply != nil do
-        {decoded, ""} = Candid.decode_parameters(reply)
-        decoded
-      else
-        tree
-      end
-    else
-      ret
+        if reply != nil do
+          {decoded, ""} = Candid.decode_parameters(reply)
+          decoded
+        else
+          tree
+        end
+
+      ret ->
+        ret
     end
   end
 
@@ -86,9 +90,11 @@ defmodule ICPAgent do
     |> mapify()
   end
 
-  defp mapify([{key, value}]), do: %{key => mapify(value)}
-  defp mapify(list) when is_list(list), do: Enum.map(list, &mapify/1) |> Map.new()
-  defp mapify({key, value}), do: {key, mapify(value)}
+  defp mapify(list) when is_list(list) do
+    Enum.map(list, fn {key, value} -> {key, mapify(value)} end) |> Map.new()
+  end
+
+  defp mapify({key, value}), do: %{key => mapify(value)}
   defp mapify(other), do: other
 
   defp do_flatten_tree([1 | list]),
@@ -116,10 +122,15 @@ defmodule ICPAgent do
         "arg" => cbor_bytes(Candid.encode_parameters(types, args))
       })
 
-    %{"reply" => %{"arg" => ret}} = curl("#{host()}/api/v2/canister/#{canister_id}/query", query)
+    curl("#{host()}/api/v2/canister/#{canister_id}/query", query)
+    |> case do
+      %{"reply" => %{"arg" => ret}} ->
+        {ret, ""} = Candid.decode_parameters(ret.value)
+        ret
 
-    {ret, ""} = Candid.decode_parameters(ret.value)
-    ret
+      err = {:error, _error} ->
+        err
+    end
   end
 
   def read_state(canister_id, wallet, paths) do
@@ -173,12 +184,9 @@ defmodule ICPAgent do
       # end
     end
 
-    {:ok, tag, ""} = CBOR.decode(ret.body)
-
     p2 = System.os_time(:millisecond)
 
     if print_requests?() do
-      # IO.puts("<< #{inspect(tag.value)}")
       IO.puts(
         "POST latency: #{p2 - now}ms http: #{p1 - now}ms (#{byte_size(ret.body)} bytes response)"
       )
@@ -186,7 +194,14 @@ defmodule ICPAgent do
       IO.puts("")
     end
 
-    tag.value
+    if ret.status >= 300 or ret.status < 200 or String.starts_with?(ret.body, "error:") or
+         ret.headers["content-type"] == ["text/plain; charset=utf-8"] do
+      IO.inspect(ret, label: "ret")
+      {:error, ret.body}
+    else
+      {:ok, tag, ""} = CBOR.decode(ret.body)
+      tag.value
+    end
   end
 
   def print_requests?() do
@@ -240,8 +255,11 @@ defmodule ICPAgent do
   This function converts a DiodeClient.Wallet.t() into a textual representation of the public ICP Principal identifier.
   """
   def wallet_textual(wallet) do
-    id = wallet_id(wallet)
+    wallet_id(wallet)
+    |> encode_textual()
+  end
 
+  def encode_textual(id) do
     Base.encode32(crc32(id) <> id, case: :lower, padding: false)
     |> String.to_charlist()
     |> Enum.chunk_every(5)
