@@ -119,7 +119,7 @@ defmodule ICPAgent do
 
       ret = %{"status" => "replied"} ->
         # read_state(canister_id, wallet, [["request_status", cbor_bytes(request_id), "reply"]])
-        {:ok, %{value: value}, ""} = CBOR.decode(ret["certificate"].value)
+        value = cbor_decode!(ret["certificate"].value).value
         tree = flatten_tree(value["tree"])
 
         reply = tree["request_status"][request_id]["reply"]
@@ -199,11 +199,17 @@ defmodule ICPAgent do
     ret
   end
 
+  defp cbor_decode!(payload, metadata \\ nil) do
+    case CBOR.decode(payload) do
+      {:ok, decoded, ""} -> decoded
+      other -> raise "Failed to decode CBOR: #{inspect({other, metadata})}}"
+    end
+  end
+
   defp curl(host, opayload, method \\ :post, headers \\ []) do
     now = System.os_time(:millisecond)
     payload = CBOR.encode(opayload)
-    {:ok, _decoded, ""} = CBOR.decode(payload)
-
+    cbor_decode!(payload)
     timeout = 15_000
 
     opts =
@@ -250,8 +256,7 @@ defmodule ICPAgent do
          ret.headers["content-type"] == ["text/plain; charset=utf-8"] do
       {:error, ret.body}
     else
-      {:ok, tag, ""} = CBOR.decode(ret.body)
-      tag.value
+      cbor_decode!(ret.body, ret).value
     end
   end
 
