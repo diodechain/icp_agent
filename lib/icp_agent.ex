@@ -253,6 +253,7 @@ defmodule ICPAgent do
     end
 
     if ret.status >= 300 or ret.status < 200 or String.starts_with?(ret.body, "error:") or
+         String.starts_with?(ret.body, "Message did not complete") or
          ret.headers["content-type"] == ["text/plain; charset=utf-8"] do
       {:error, ret.body}
     else
