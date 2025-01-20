@@ -163,44 +163,48 @@ defmodule ICPAgent do
         headers: [content_type: "application/cbor"] ++ headers
       ]
 
-    {:ok, ret} =
+    result =
       case method do
         :get -> Req.new(opts)
         :post -> Req.new([body: payload] ++ opts)
       end
       |> Req.request()
 
-    p1 = System.os_time(:millisecond)
+    with {:ok, ret} <- result do
+      p1 = System.os_time(:millisecond)
 
-    if print_requests?() do
-      method = opayload["content"]["method_name"] || ""
+      if print_requests?() do
+        method = opayload["content"]["method_name"] || ""
 
-      IO.puts(
-        "POST #{method} #{String.replace_prefix(host, host(), "")} (#{byte_size(payload)} bytes request)"
-      )
+        IO.puts(
+          "POST #{method} #{String.replace_prefix(host, host(), "")} (#{byte_size(payload)} bytes request)"
+        )
 
-      # if method == :post do
-      #   IO.puts(">> #{inspect(opayload)}")
-      # end
-    end
+        # if method == :post do
+        #   IO.puts(">> #{inspect(opayload)}")
+        # end
+      end
 
-    p2 = System.os_time(:millisecond)
+      p2 = System.os_time(:millisecond)
 
-    if print_requests?() do
-      IO.puts(
-        "POST latency: #{p2 - now}ms http: #{p1 - now}ms (#{byte_size(ret.body)} bytes response)"
-      )
+      if print_requests?() do
+        IO.puts(
+          "POST latency: #{p2 - now}ms http: #{p1 - now}ms (#{byte_size(ret.body)} bytes response)"
+        )
 
-      IO.puts("")
-    end
+        IO.puts("")
+      end
 
-    if ret.status >= 300 or ret.status < 200 or String.starts_with?(ret.body, "error:") or
-         ret.headers["content-type"] == ["text/plain; charset=utf-8"] do
-      IO.inspect(ret, label: "ret")
-      {:error, ret.body}
+      if ret.status >= 300 or ret.status < 200 or String.starts_with?(ret.body, "error:") or
+           ret.headers["content-type"] == ["text/plain; charset=utf-8"] do
+        IO.inspect(ret, label: "ret")
+        {:error, ret.body}
+      else
+        {:ok, tag, ""} = CBOR.decode(ret.body)
+        tag.value
+      end
     else
-      {:ok, tag, ""} = CBOR.decode(ret.body)
-      tag.value
+      other -> other
     end
   end
 
@@ -288,6 +292,19 @@ defmodule ICPAgent do
        public}
 
     :public_key.pkix_encode(:OTPSubjectPublicKeyInfo, term, :otp)
+  end
+
+  def wallet_private_pem(wallet) do
+    privkey = Wallet.privkey!(wallet)
+    pubkey = Wallet.pubkey_long!(wallet)
+
+    der =
+      :public_key.der_encode(
+        :ECPrivateKey,
+        {:ECPrivateKey, 1, privkey, {:namedCurve, {1, 3, 132, 0, 10}}, pubkey, :asn1_NOVALUE}
+      )
+
+    :public_key.pem_encode([{:ECPrivateKey, der, :not_encrypted}])
   end
 
   @doc """

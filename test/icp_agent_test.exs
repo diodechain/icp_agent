@@ -103,4 +103,9 @@ defmodule ICPAgentTest do
     [version] = ICPAgent.query(address, Wallet.new(), method)
     IO.inspect(Map.new(version), label: "sns latest version")
   end
+
+  test "pem" do
+    w = Wallet.new()
+    assert ICPAgent.wallet_from_pem(ICPAgent.wallet_private_pem(w)) == w
+  end
 end
