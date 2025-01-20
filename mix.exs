@@ -9,6 +9,7 @@ defmodule ICPAgent.MixProject do
       elixir: "~> 1.16",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      aliases: aliases(),
 
       # Hex
       description: "ICPAgent is an Elixir agent for the Internet Computer (ICP).",
@@ -35,15 +36,23 @@ defmodule ICPAgent.MixProject do
     ]
   end
 
+  defp aliases do
+    [
+      lint: ["format --check-formatted", "credo --strict", "dialyzer"]
+    ]
+  end
+
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
       {:candid, "~> 1.0"},
-      {:diode_client, "~> 1.0"},
       {:cbor, "~> 1.0"},
-      {:jason, "~> 1.4"},
+      {:diode_client, "~> 1.0"},
       {:ex_sha3, "~> 0.1.1"},
+      {:jason, "~> 1.4"},
       {:req, "~> 0.5.8"},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.3", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.25.0", only: :dev}
     ]
   end

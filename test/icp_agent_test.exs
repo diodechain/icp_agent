@@ -101,7 +101,6 @@ defmodule ICPAgentTest do
     # https://github.com/dfinity/ic/blob/master/rs/nns/sns-wasm/canister/sns-wasm.did
     method = "get_latest_sns_version_pretty"
     [version] = ICPAgent.query(address, Wallet.new(), method)
-    IO.inspect(Map.new(version), label: "sns latest version")
   end
 
   test "pem" do

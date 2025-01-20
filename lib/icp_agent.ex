@@ -1,20 +1,67 @@
 defmodule ICPAgent do
+  @moduledoc """
+  This module provides a client for the ICP protocol.
+
+  ## Query example
+
+  This examples uses the `get_latest_sns_version_pretty` method from the SNS-wasm system canister. It's a publicly available method, so no authentication is needed. We're generating a new wallet ad-hoc and using it to query the
+  canister.
+
+  ```elixir
+  > [versions] = ICPAgent.query("qaa6y-5yaaa-aaaaa-aaafa-cai", DiodeClient.Wallet.new(), "get_latest_sns_version_pretty")
+  [
+    [
+      {"Ledger Index",
+      "2adc74fe5667f26ea4c4006309d99b1dfa71787aa43a5c168cb08ec725677996"},
+      {"Governance",
+      "bd936ef6bb878df87856a0b0c46034a242a88b7f1eeff5439daf6278febca6b7"},
+      {"Ledger Archive",
+      "f94cf1db965b7042197e5894fef54f5f413bb2ebc607ff0fb59c9d4dfd3babea"},
+      {"Swap", "8313ac22d2ef0a0c1290a85b47f235cfa24ca2c96d095b8dbed5502483b9cd18"},
+      {"Root", "431cb333feb3f762f742b0dea58745633a2a2ca41075e9933183d850b4ddb259"},
+      {"Ledger",
+      "25071c2c55ad4571293e00d8e277f442aec7aed88109743ac52df3125209ff45"}
+    ]
+  ]
+  ```
+
+  ## Call example
+
+  Calls and queries both support providing arguments and types in Candid format specification. These are some examples of call structures to give a better understanding of how the types are specified.
+
+
+  ```elixir
+  # Call with passing two blobs as an argument
+  > [{cycles, 200}] = ICPAgent.call(canister_id, wallet, "test_blob_input", [:blob, :blob], [blob_a, blob_b])
+
+  # Call with passing a record as an argument
+  > [{cycles, 3}] = ICPAgent.call(canister_id, wallet, "test_record_input", [{:record, [{0, :nat32}, {1, :nat32}]}], [{1, 2}])
+
+  # Call with passing a vector of records as an argument
+  > {[cycles, 200]} = ICPAgent.call(canister_id, wallet, "test_vec_input", [{:vec, {:record, [{0, :blob}, {1, :blob}]}}], [[{blob_a, blob_b}]])
+  ```
+
+  ## Limits
+
+  - Only secp256k1 keys are supported.
+  - Did files are not supported and instead types for a call/query must be manually specified.
+  """
   alias DiodeClient.Wallet
 
-  def default_canister_id() do
+  def default_canister_id do
     "bkyz2-fmaaa-aaaaa-qaaaq-cai"
   end
 
-  def default_host() do
+  def default_host do
     # "http://127.0.0.1:4943"
     "https://ic0.app"
   end
 
-  def host() do
+  def host do
     System.get_env("ICP_DOMAIN", default_host())
   end
 
-  def status() do
+  def status do
     curl("#{host()}/api/v2/status", %{}, :get)
   end
 
@@ -22,10 +69,15 @@ defmodule ICPAgent do
     <<byte_size(name), name::binary>>
   end
 
+  # 5 minutes in nanoseconds
+  # icp accepts up to 5 minutes ingress expiry into the future.
+  # we use 2.5 minutes to account for network latency and clock drift placing it in the middle of the range.
+  @ingress_expiry_delta :timer.minutes(2.5) * 1_000_000
+
   defp sign_query(wallet, query) do
     query =
       Map.merge(query, %{
-        "ingress_expiry" => System.os_time(:nanosecond) + 1000 * 1000 * 1000,
+        "ingress_expiry" => trunc(System.os_time(:nanosecond) + @ingress_expiry_delta),
         "sender" => cbor_bytes(wallet_id(wallet))
       })
 
@@ -163,52 +215,51 @@ defmodule ICPAgent do
         headers: [content_type: "application/cbor"] ++ headers
       ]
 
-    result =
-      case method do
-        :get -> Req.new(opts)
-        :post -> Req.new([body: payload] ++ opts)
-      end
-      |> Req.request()
+    case method do
+      :get -> Req.new(opts)
+      :post -> Req.new([body: payload] ++ opts)
+    end
+    |> Req.request()
+    |> process_response(now, opayload["content"]["method_name"] || "", payload, host)
+  end
 
-    with {:ok, ret} <- result do
-      p1 = System.os_time(:millisecond)
+  defp process_response({:ok, ret}, now, method, payload, host) do
+    p1 = System.os_time(:millisecond)
 
-      if print_requests?() do
-        method = opayload["content"]["method_name"] || ""
+    if print_requests?() do
+      IO.puts(
+        "POST #{method} #{String.replace_prefix(host, host(), "")} (#{byte_size(payload)} bytes request)"
+      )
 
-        IO.puts(
-          "POST #{method} #{String.replace_prefix(host, host(), "")} (#{byte_size(payload)} bytes request)"
-        )
+      # if method == :post do
+      #   IO.puts(">> #{inspect(opayload)}")
+      # end
+    end
 
-        # if method == :post do
-        #   IO.puts(">> #{inspect(opayload)}")
-        # end
-      end
+    p2 = System.os_time(:millisecond)
 
-      p2 = System.os_time(:millisecond)
+    if print_requests?() do
+      IO.puts(
+        "POST latency: #{p2 - now}ms http: #{p1 - now}ms (#{byte_size(ret.body)} bytes response)"
+      )
 
-      if print_requests?() do
-        IO.puts(
-          "POST latency: #{p2 - now}ms http: #{p1 - now}ms (#{byte_size(ret.body)} bytes response)"
-        )
+      IO.puts("")
+    end
 
-        IO.puts("")
-      end
-
-      if ret.status >= 300 or ret.status < 200 or String.starts_with?(ret.body, "error:") or
-           ret.headers["content-type"] == ["text/plain; charset=utf-8"] do
-        IO.inspect(ret, label: "ret")
-        {:error, ret.body}
-      else
-        {:ok, tag, ""} = CBOR.decode(ret.body)
-        tag.value
-      end
+    if ret.status >= 300 or ret.status < 200 or String.starts_with?(ret.body, "error:") or
+         ret.headers["content-type"] == ["text/plain; charset=utf-8"] do
+      {:error, ret.body}
     else
-      other -> other
+      {:ok, tag, ""} = CBOR.decode(ret.body)
+      tag.value
     end
   end
 
-  def print_requests?() do
+  defp process_response(other, _now, _method, _payload, _host) do
+    other
+  end
+
+  def print_requests? do
     System.get_env("ICP_PRINT_REQUESTS", "false") == "true"
   end
 
@@ -218,7 +269,7 @@ defmodule ICPAgent do
   https://internetcomputer.org/docs/current/references/ic-interface-spec
   """
   def h([]), do: :crypto.hash(:sha256, "")
-  def h(list) when is_list(list), do: :crypto.hash(:sha256, Enum.join(Enum.map(list, &h/1), ""))
+  def h(list) when is_list(list), do: :crypto.hash(:sha256, Enum.map_join(list, &h/1))
   def h(number) when is_integer(number), do: h(LEB128.encode_unsigned(number))
   def h(%CBOR.Tag{tag: :bytes, value: data}), do: h(data)
   def h({:utf8, data}) when is_binary(data), do: h(data)
