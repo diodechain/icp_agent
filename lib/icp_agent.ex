@@ -31,14 +31,20 @@ defmodule ICPAgent do
 
 
   ```elixir
+  # Generating a new private key as identity
+  > wallet = DiodeClient.Wallet.new()
+
   # Call with passing two blobs as an argument
-  > [{cycles, 200}] = ICPAgent.call(canister_id, wallet, "test_blob_input", [:blob, :blob], [blob_a, blob_b])
+  > [200] = ICPAgent.call(canister_id, wallet, "test_blob_input", [:blob, :blob], ["blob_a", "blob_b"])
 
   # Call with passing a record as an argument
-  > [{cycles, 3}] = ICPAgent.call(canister_id, wallet, "test_record_input", [{:record, [{0, :nat32}, {1, :nat32}]}], [{1, 2}])
+  > [3] = ICPAgent.call(canister_id, wallet, "test_record_input", [{:record, {:nat32, :nat32}}], [{1, 2}])
+
+  # Call with passing a record with named fields as an argument
+  > [3] = ICPAgent.call(canister_id, wallet, "test_named_record_input", [{:record, %{a: :nat32, b: :nat32}}], [{a: 1, b: 2}])
 
   # Call with passing a vector of records as an argument
-  > {[cycles, 200]} = ICPAgent.call(canister_id, wallet, "test_vec_input", [{:vec, {:record, [{0, :blob}, {1, :blob}]}}], [[{blob_a, blob_b}]])
+  > [200] = ICPAgent.call(canister_id, wallet, "test_vec_input", [{:vec, {:record, {:blob, :blob}}}], [[{"blob_a", "blob_b"}]])
   ```
 
   ## Limits
