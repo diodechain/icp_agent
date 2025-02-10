@@ -68,7 +68,7 @@ defmodule ICPAgent do
   end
 
   def status do
-    curl("#{host()}/api/v2/status", %{}, :get)
+    fetch("#{host()}/api/v2/status", %{}, method: :get)
   end
 
   def domain_separator(name) do
@@ -118,7 +118,7 @@ defmodule ICPAgent do
         "arg" => cbor_bytes(Candid.encode_parameters(types, args))
       })
 
-    curl("#{host()}/api/v3/canister/#{canister_id}/call", query)
+    fetch("#{host()}/api/v3/canister/#{canister_id}/call", query, method: :post, retry: false)
     |> case do
       ret = {:error, _err} ->
         ret
@@ -180,7 +180,7 @@ defmodule ICPAgent do
         "arg" => cbor_bytes(Candid.encode_parameters(types, args))
       })
 
-    curl("#{host()}/api/v2/canister/#{canister_id}/query", query)
+    fetch("#{host()}/api/v2/canister/#{canister_id}/query", query)
     |> case do
       %{"reply" => %{"arg" => ret}} ->
         {ret, ""} = Candid.decode_parameters(ret.value)
@@ -199,7 +199,7 @@ defmodule ICPAgent do
       })
 
     %{"reply" => %{"arg" => ret}} =
-      curl("#{host()}/api/v2/canister/#{canister_id}/read_state", query)
+      fetch("#{host()}/api/v2/canister/#{canister_id}/read_state", query)
 
     {ret, ""} = Candid.decode_parameters(ret.value)
     ret
@@ -212,19 +212,22 @@ defmodule ICPAgent do
     end
   end
 
-  defp curl(host, opayload, method \\ :post, headers \\ []) do
+  defp fetch(host, opayload, opts \\ []) do
     now = System.os_time(:millisecond)
     payload = CBOR.encode(opayload)
     cbor_decode!(payload)
     timeout = 15_000
+    method = opts[:method] || :post
+    retry = opts[:retry] || :safe_transient
 
     opts =
       [
         url: host,
         method: method,
+        retry: retry,
         receive_timeout: timeout,
         connect_options: [timeout: timeout],
-        headers: [content_type: "application/cbor"] ++ headers
+        headers: [content_type: "application/cbor"]
       ]
 
     case method do
