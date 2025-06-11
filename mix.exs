@@ -48,6 +48,7 @@ defmodule ICPAgent.MixProject do
       {:candid, "~> 1.0"},
       {:cbor, "~> 1.0"},
       {:diode_client, "~> 1.0"},
+      {:ex_ecc, "~> 0.1"},
       {:ex_sha3, "~> 0.1.1"},
       {:jason, "~> 1.4"},
       {:req, "~> 0.5.8"},
