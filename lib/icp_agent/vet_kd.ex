@@ -1,9 +1,14 @@
 defmodule ICPAgent.VetKD do
-  alias ExEcc.BLS.PointCompression
+  @moduledoc """
+  This module provides functions for working with Dfinity vetKeys.
+
+  https://internetcomputer.org/docs/references/vetkeys-overview
+  """
   alias ExEcc.BLS.Ciphersuites.G2Basic
+  alias ExEcc.BLS.PointCompression
   alias ExEcc.OptimizedBLS12381.OptimizedCurve, as: Curve
 
-  def new_transport_private_key() do
+  def new_transport_private_key do
     rem(:binary.decode_unsigned(:crypto.strong_rand_bytes(64)), Curve.curve_order())
   end
 
