@@ -109,7 +109,7 @@ defmodule ICPAgent do
   def utf8_to_list({:utf8, binary}) when is_binary(binary), do: binary
   def utf8_to_list(other), do: other
 
-  def call(canister_id, wallet, method, types \\ [], args \\ []) do
+  def call(canister_id, wallet, method, types \\ [], args \\ [], return_types \\ nil) do
     {request_id, query} =
       sign_query(wallet, %{
         "request_type" => "call",
@@ -131,7 +131,7 @@ defmodule ICPAgent do
         reply = tree["request_status"][request_id]["reply"]
 
         if reply != nil do
-          {decoded, ""} = Candid.decode_parameters(reply)
+          {decoded, ""} = Candid.decode_parameters(reply, return_types)
           decoded
         else
           tree
@@ -171,7 +171,7 @@ defmodule ICPAgent do
   > [versions] = ICPAgent.query("qaa6y-5yaaa-aaaaa-aaafa-cai", DiodeClient.Wallet.new(), "get_latest_sns_version_pretty")
   ```
   """
-  def query(canister_id, wallet, method, types \\ [], args \\ []) do
+  def query(canister_id, wallet, method, types \\ [], args \\ [], return_types \\ nil) do
     {_request_id, query} =
       sign_query(wallet, %{
         "request_type" => "query",
@@ -183,7 +183,7 @@ defmodule ICPAgent do
     fetch("#{host()}/api/v2/canister/#{canister_id}/query", query)
     |> case do
       %{"reply" => %{"arg" => ret}} ->
-        {ret, ""} = Candid.decode_parameters(ret.value)
+        {ret, ""} = Candid.decode_parameters(ret.value, return_types)
         ret
 
       err = {:error, _error} ->
