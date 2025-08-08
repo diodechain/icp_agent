@@ -216,7 +216,8 @@ defmodule ICPAgent do
     now = System.os_time(:millisecond)
     payload = CBOR.encode(opayload)
     cbor_decode!(payload)
-    timeout = 15_000
+    # ICP native timeout is 20 seconds, we use 30 seconds to account for network latency and clock drift
+    timeout = 30_000
     method = opts[:method] || :post
     retry = opts[:retry] || :safe_transient
 
