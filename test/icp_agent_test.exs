@@ -48,7 +48,9 @@ defmodule ICPAgentTest do
         "arg" => "DIDL\x00\xFD*"
       })
       |> DiodeClient.Base16.encode()
+  end
 
+  test "call" do
     w =
       Wallet.from_privkey(
         DiodeClient.Base16.decode(
@@ -59,30 +61,24 @@ defmodule ICPAgentTest do
     IO.puts("wallet_textual: #{ICPAgent.wallet_textual(w)}")
     IO.puts("wallet_address: #{Wallet.printable(w)}")
 
-    # canister_id = default_canister_id()
+    canister_id = "tnqzy-zaaaa-aaaao-qkeza-cai"
 
-    # [{0, 1}] = call(canister_id, w, "test_record_output", [], [])
+    [{0, 1}] = ICPAgent.call(canister_id, w, "test_record_output", [], [])
 
-    # [3] =
-    #   call(canister_id, w, "test_record_input", [{:record, [{0, :nat32}, {1, :nat32}]}], [{1, 2}])
+    {request_id, _ret} = ICPAgent.raw_call(canister_id, w, "test_record_output", [], [])
+    ret = ICPAgent.poll_call(canister_id, w, request_id)
+    # IO.puts("ret: #{inspect(ret)}")
+    Process.sleep(1000)
+    [{0, 1}] = ret
 
-    # identity_contract = DiodeClient.Base16.decode("0x08ff68fe9da498223d4fc953bc4c336ec5726fec")
-    # [200] = call(canister_id, w, "update_identity_role", [:blob, :blob], [Wallet.pubkey_long!(w), identity_contract])
-    # # test_batch_write(w, canister_id)
-
-    # [n] = query(canister_id, w, "get_max_message_id")
-
-    # message = "hello diode #{n}"
-    # key_id = Wallet.address!(w)
-    # isOk(call(canister_id, w, "add_message", [:blob, :blob], [key_id, message]))
-    # n2 = n + 1
-    # [^n2] = query(canister_id, w, "get_max_message_id")
-
-    # message = "hello diode #{n2}"
-    # key_id = Wallet.address!(w)
-    # isOk(call(canister_id, w, "add_message", [:blob, :blob], [key_id, message]))
-    # n3 = n2 + 1
-    # [^n3] = query(canister_id, w, "get_max_message_id")
+    [3] =
+      ICPAgent.call(
+        canister_id,
+        w,
+        "test_record_input",
+        [{:record, [:nat32, :nat32]}],
+        [{1, 2}]
+      )
   end
 
   test "status" do

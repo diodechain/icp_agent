@@ -109,7 +109,7 @@ defmodule ICPAgent do
   def utf8_to_list({:utf8, binary}) when is_binary(binary), do: binary
   def utf8_to_list(other), do: other
 
-  def call(canister_id, wallet, method, types \\ [], args \\ [], return_types \\ nil) do
+  def raw_call(canister_id, wallet, method, types \\ [], args \\ []) do
     {request_id, query} =
       sign_query(wallet, %{
         "request_type" => "call",
@@ -118,13 +118,26 @@ defmodule ICPAgent do
         "arg" => cbor_bytes(Candid.encode_parameters(types, args))
       })
 
-    fetch("#{host()}/api/v3/canister/#{canister_id}/call", query, method: :post, retry: false)
-    |> case do
+    ret =
+      fetch("#{host()}/api/v3/canister/#{canister_id}/call", query, method: :post, retry: false)
+
+    {request_id, ret}
+  end
+
+  def call(canister_id, wallet, method, types \\ [], args \\ [], return_types \\ nil) do
+    {request_id, ret} = raw_call(canister_id, wallet, method, types, args)
+    process_call_return(canister_id, wallet, request_id, return_types, ret)
+  end
+
+  defp process_call_return(canister_id, wallet, request_id, return_types, ret) do
+    case ret do
       ret = {:error, _err} ->
         ret
 
+      {:ok, :accepted} ->
+        poll_call(canister_id, wallet, request_id, return_types, 0)
+
       ret = %{"status" => "replied"} ->
-        # read_state(canister_id, wallet, [["request_status", cbor_bytes(request_id), "reply"]])
         value = cbor_decode!(ret["certificate"].value).value
         tree = flatten_tree(value["tree"])
 
@@ -139,6 +152,24 @@ defmodule ICPAgent do
 
       ret ->
         ret
+    end
+  end
+
+  def poll_call(canister_id, wallet, request_id, return_types \\ nil, retries \\ 0) do
+    if retries > 10 do
+      {:error, "Call timed out"}
+    else
+      Process.sleep(1000)
+
+      read_state(canister_id, wallet, [["request_status", cbor_bytes(request_id), "reply"]])
+      |> case do
+        ret = %{"certificate" => %{value: _value}} ->
+          ret = Map.put(ret, "status", "replied")
+          process_call_return(canister_id, wallet, request_id, return_types, ret)
+
+        _ret ->
+          poll_call(canister_id, wallet, request_id, return_types, retries + 1)
+      end
     end
   end
 
@@ -198,11 +229,7 @@ defmodule ICPAgent do
         "paths" => paths
       })
 
-    %{"reply" => %{"arg" => ret}} =
-      fetch("#{host()}/api/v2/canister/#{canister_id}/read_state", query)
-
-    {ret, ""} = Candid.decode_parameters(ret.value)
-    ret
+    fetch("#{host()}/api/v2/canister/#{canister_id}/read_state", query)
   end
 
   defp cbor_decode!(payload, metadata \\ nil) do
@@ -216,6 +243,7 @@ defmodule ICPAgent do
     now = System.os_time(:millisecond)
     payload = CBOR.encode(opayload)
     cbor_decode!(payload)
+
     # ICP native timeout is 20 seconds, we use 30 seconds to account for network latency and clock drift
     timeout = 30_000
     method = opts[:method] || :post
@@ -246,10 +274,6 @@ defmodule ICPAgent do
       IO.puts(
         "POST #{method} #{String.replace_prefix(host, host(), "")} (#{byte_size(payload)} bytes request)"
       )
-
-      # if method == :post do
-      #   IO.puts(">> #{inspect(opayload)}")
-      # end
     end
 
     p2 = System.os_time(:millisecond)
@@ -262,12 +286,17 @@ defmodule ICPAgent do
       IO.puts("")
     end
 
-    if ret.status >= 300 or ret.status < 200 or String.starts_with?(ret.body, "error:") or
-         String.starts_with?(ret.body, "Message did not complete") or
-         ret.headers["content-type"] == ["text/plain; charset=utf-8"] do
-      {:error, ret.body}
-    else
-      cbor_decode!(ret.body, ret).value
+    cond do
+      ret.status == 202 ->
+        {:ok, :accepted}
+
+      ret.status >= 300 or ret.status < 200 or String.starts_with?(ret.body, "error:") or
+        String.starts_with?(ret.body, "Message did not complete") or
+          ret.headers["content-type"] == ["text/plain; charset=utf-8"] ->
+        {:error, ret.body}
+
+      true ->
+        cbor_decode!(ret.body, ret).value
     end
   end
 
