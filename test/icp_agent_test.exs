@@ -67,8 +67,6 @@ defmodule ICPAgentTest do
 
     {request_id, _ret} = ICPAgent.raw_call(canister_id, w, "test_record_output", [], [])
     ret = ICPAgent.poll_call(canister_id, w, request_id)
-    # IO.puts("ret: #{inspect(ret)}")
-    Process.sleep(1000)
     [{0, 1}] = ret
 
     [3] =
