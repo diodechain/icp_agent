@@ -144,8 +144,13 @@ defmodule ICPAgent do
         reply = tree["request_status"][request_id]["reply"]
 
         if reply != nil do
-          {decoded, ""} = Candid.decode_parameters(reply, return_types)
-          decoded
+          case Candid.decode_parameters(ret.value, return_types) do
+            {ret, ""} ->
+              ret
+
+            {ret, rest} ->
+              raise "Partial return types provided. Decoded #{inspect(ret)} rest: #{inspect(rest)}"
+          end
         else
           tree
         end
