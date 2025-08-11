@@ -144,13 +144,7 @@ defmodule ICPAgent do
         reply = tree["request_status"][request_id]["reply"]
 
         if reply != nil do
-          case Candid.decode_parameters(ret.value, return_types) do
-            {ret, ""} ->
-              ret
-
-            {ret, rest} ->
-              raise "Partial return types provided. Decoded #{inspect(ret)} rest: #{inspect(rest)}"
-          end
+          decode_value(reply, return_types)
         else
           tree
         end
@@ -218,12 +212,15 @@ defmodule ICPAgent do
 
     fetch("#{host()}/api/v2/canister/#{canister_id}/query", query)
     |> case do
-      %{"reply" => %{"arg" => ret}} ->
-        {ret, ""} = Candid.decode_parameters(ret.value, return_types)
-        ret
+      %{"reply" => %{"arg" => ret}} -> decode_value(ret.value, return_types)
+      err = {:error, _error} -> err
+    end
+  end
 
-      err = {:error, _error} ->
-        err
+  defp decode_value(value, types) do
+    case Candid.decode_parameters(value, types) do
+      {ret, ""} -> ret
+      {ret, rest} -> {:error, {:partial_types, ret, rest}}
     end
   end
 
