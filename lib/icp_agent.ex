@@ -217,10 +217,17 @@ defmodule ICPAgent do
     end
   end
 
-  defp decode_value(value, types) do
+  defp decode_value(value, types) when is_list(types) or is_nil(types) do
     case Candid.decode_parameters(value, types) do
       {ret, ""} -> ret
       {ret, rest} -> {:error, {:partial_types, ret, rest}}
+    end
+  end
+
+  defp decode_value(value, type) do
+    case decode_value(value, [type]) do
+      {:error, _error} = err -> raise err
+      [ret] -> ret
     end
   end
 
