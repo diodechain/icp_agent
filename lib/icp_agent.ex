@@ -118,9 +118,7 @@ defmodule ICPAgent do
         "arg" => cbor_bytes(Candid.encode_parameters(types, args))
       })
 
-    ret =
-      fetch("#{host()}/api/v3/canister/#{canister_id}/call", query, method: :post, retry: false)
-
+    ret = fetch("#{host()}/api/v3/canister/#{canister_id}/call", query, method: :post)
     {request_id, ret}
   end
 
@@ -256,7 +254,7 @@ defmodule ICPAgent do
     # ICP native timeout is 20 seconds, we use 30 seconds to account for network latency and clock drift
     timeout = 30_000
     method = opts[:method] || :post
-    retry = opts[:retry] || :safe_transient
+    retry = opts[:retry] || :transient
 
     opts =
       [
