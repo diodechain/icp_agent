@@ -224,8 +224,8 @@ defmodule ICPAgent do
 
   defp decode_value(value, type) do
     case decode_value(value, [type]) do
-      {:error, _error} = err -> raise err
       [ret] -> ret
+      other -> other
     end
   end
 
