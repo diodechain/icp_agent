@@ -52,6 +52,7 @@ defmodule ICPAgent do
   - Only secp256k1 keys are supported.
   - Did files are not supported and instead types for a call/query must be manually specified.
   """
+  require Logger
   alias DiodeClient.Wallet
 
   def default_canister_id do
@@ -127,27 +128,44 @@ defmodule ICPAgent do
     process_call_return(canister_id, wallet, request_id, return_types, ret)
   end
 
-  defp process_call_return(canister_id, wallet, request_id, return_types, ret) do
+  defp process_call_return(canister_id, wallet, request_id, return_types, ret, poll_count \\ 0) do
     case ret do
       ret = {:error, _err} ->
         ret
 
       {:ok, :accepted} ->
-        poll_call(canister_id, wallet, request_id, return_types, 0)
+        poll_call(canister_id, wallet, request_id, return_types, poll_count)
 
       ret = %{"status" => "replied"} ->
         value = cbor_decode!(ret["certificate"].value).value
         tree = flatten_tree(value["tree"])
 
-        reply = tree["request_status"][request_id]["reply"]
+        case tree["request_status"][request_id] do
+          nil ->
+            {:error, {:unknown_request_status, tree}}
 
-        if reply != nil do
-          decode_value(reply, return_types)
-        else
-          tree
+          %{"status" => "replied", "reply" => reply} ->
+            decode_value(reply, return_types)
+
+          # status => replied is not present when polling
+          %{"reply" => reply} ->
+            decode_value(reply, return_types)
+
+          %{"status" => "rejected", "reject_message" => reject_message} ->
+            {:error, {:rejected, reject_message}}
+
+          %{"status" => nil} ->
+            poll_call(canister_id, wallet, request_id, return_types, poll_count + 1)
+
+          other ->
+            {:error, {:unknown_request_status, other}}
         end
 
       ret ->
+        Logger.error(
+          "Call returned unexpected result: #{inspect(ret)} for request: #{inspect(request_id)}"
+        )
+
         ret
     end
   end
@@ -210,8 +228,21 @@ defmodule ICPAgent do
 
     fetch("#{host()}/api/v2/canister/#{canister_id}/query", query)
     |> case do
-      %{"reply" => %{"arg" => ret}} -> decode_value(ret.value, return_types)
-      err = {:error, _error} -> err
+      %{"status" => "replied", "reply" => %{"arg" => ret}} ->
+        decode_value(ret.value, return_types)
+
+      # status => replied is not present when polling
+      %{"reply" => %{"arg" => ret}} ->
+        decode_value(ret.value, return_types)
+
+      %{"status" => "rejected", "reject_message" => reject_message} ->
+        {:error, {:rejected, reject_message}}
+
+      err = {:error, _error} ->
+        err
+
+      other ->
+        {:error, {:unknown_request_status, other}}
     end
   end
 
