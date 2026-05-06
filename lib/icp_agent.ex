@@ -378,10 +378,6 @@ defmodule ICPAgent do
     end
   end
 
-  defp process_response(other, _now, _method, _payload, _path) do
-    other
-  end
-
   def print_requests? do
     System.get_env("ICP_PRINT_REQUESTS", "false") == "true"
   end
