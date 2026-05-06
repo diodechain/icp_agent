@@ -64,12 +64,27 @@ defmodule ICPAgent do
     "https://ic0.app"
   end
 
+  @boundary_hosts [
+    "https://ic0.app",
+    "https://ip0.io",
+    "https://icp-api.io"
+  ]
+
+  defp normalize_origin(url) when is_binary(url), do: String.trim_trailing(url, "/")
+
   def host do
     System.get_env("ICP_DOMAIN", default_host())
+    |> normalize_origin()
+  end
+
+  defp host_candidates do
+    primary = host()
+    rest = Enum.reject(@boundary_hosts, &(normalize_origin(&1) == primary))
+    [primary | rest]
   end
 
   def status do
-    fetch("#{host()}/api/v2/status", %{}, method: :get)
+    fetch("/api/v2/status", %{}, method: :get)
   end
 
   def domain_separator(name) do
@@ -119,7 +134,7 @@ defmodule ICPAgent do
         "arg" => cbor_bytes(Candid.encode_parameters(types, args))
       })
 
-    ret = fetch("#{host()}/api/v3/canister/#{canister_id}/call", query, method: :post)
+    ret = fetch("/api/v3/canister/#{canister_id}/call", query, method: :post)
     {request_id, ret}
   end
 
@@ -163,7 +178,7 @@ defmodule ICPAgent do
 
       ret ->
         Logger.error(
-          "Call returned unexpected result: #{inspect(ret)} for request: #{inspect(request_id)}"
+          "ICPAgent: call returned unexpected result: #{inspect(ret)} for request: #{inspect(request_id)}"
         )
 
         ret
@@ -226,7 +241,7 @@ defmodule ICPAgent do
         "arg" => cbor_bytes(Candid.encode_parameters(types, args))
       })
 
-    fetch("#{host()}/api/v2/canister/#{canister_id}/query", query)
+    fetch("/api/v2/canister/#{canister_id}/query", query)
     |> case do
       %{"status" => "replied", "reply" => %{"arg" => ret}} ->
         decode_value(ret.value, return_types)
@@ -267,7 +282,7 @@ defmodule ICPAgent do
         "paths" => paths
       })
 
-    fetch("#{host()}/api/v2/canister/#{canister_id}/read_state", query)
+    fetch("/api/v2/canister/#{canister_id}/read_state", query)
   end
 
   defp cbor_decode!(payload, metadata \\ nil) do
@@ -277,41 +292,66 @@ defmodule ICPAgent do
     end
   end
 
-  defp fetch(host, opayload, opts \\ []) do
+  defp fetch(path, opayload, opts \\ []) when is_binary(path) do
     now = System.os_time(:millisecond)
     payload = CBOR.encode(opayload)
     cbor_decode!(payload)
+    fetch_with_fallback(host_candidates(), path, now, opayload, payload, opts)
+  end
 
+  defp fetch_with_fallback([], _path, _now, _opayload, _payload, _opts) do
+    {:error, %Req.TransportError{reason: :nxdomain}}
+  end
+
+  defp fetch_with_fallback([base | rest], path, now, opayload, payload, opts) do
+    url = base <> path
+
+    case request_once(url, payload, opts) do
+      {:error, %Req.TransportError{reason: :nxdomain}} ->
+        fetch_with_fallback(rest, path, now, opayload, payload, opts)
+
+      {:ok, ret} ->
+        old_host = host()
+
+        if base != old_host do
+          Logger.warning("ICPAgent: Using fallback host #{base} instead of #{old_host}")
+          System.put_env("ICP_DOMAIN", base)
+        end
+
+        process_response({:ok, ret}, now, opayload["content"]["method_name"] || "", payload, path)
+
+      other ->
+        other
+    end
+  end
+
+  defp request_once(url, payload, opts) do
     # ICP native timeout is 20 seconds, we use 30 seconds to account for network latency and clock drift
     timeout = 30_000
     method = opts[:method] || :post
     retry = opts[:retry] || :transient
 
-    opts =
-      [
-        url: host,
-        method: method,
-        retry: retry,
-        receive_timeout: timeout,
-        connect_options: [timeout: timeout],
-        headers: [content_type: "application/cbor"]
-      ]
+    req_opts = [
+      url: url,
+      method: method,
+      retry: retry,
+      receive_timeout: timeout,
+      connect_options: [timeout: timeout],
+      headers: [content_type: "application/cbor"]
+    ]
 
     case method do
-      :get -> Req.new(opts)
-      :post -> Req.new([body: payload] ++ opts)
+      :get -> Req.new(req_opts)
+      :post -> Req.new([body: payload] ++ req_opts)
     end
     |> Req.request()
-    |> process_response(now, opayload["content"]["method_name"] || "", payload, host)
   end
 
-  defp process_response({:ok, ret}, now, method, payload, host) do
+  defp process_response({:ok, ret}, now, method, payload, path) do
     p1 = System.os_time(:millisecond)
 
     if print_requests?() do
-      IO.puts(
-        "POST #{method} #{String.replace_prefix(host, host(), "")} (#{byte_size(payload)} bytes request)"
-      )
+      IO.puts("POST #{method} #{path} (#{byte_size(payload)} bytes request)")
     end
 
     p2 = System.os_time(:millisecond)
@@ -338,7 +378,7 @@ defmodule ICPAgent do
     end
   end
 
-  defp process_response(other, _now, _method, _payload, _host) do
+  defp process_response(other, _now, _method, _payload, _path) do
     other
   end
 
