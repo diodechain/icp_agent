@@ -66,9 +66,15 @@ defmodule ICPAgent do
 
   @boundary_hosts [
     "https://ic0.app",
-    "https://ip0.io",
+    "https://icp0.io",
     "https://icp-api.io"
   ]
+
+  @doc """
+  Returns the list of public ICP API boundary node hosts that the agent will
+  try when making API requests.
+  """
+  def boundary_hosts, do: @boundary_hosts
 
   defp normalize_origin(url) when is_binary(url), do: String.trim_trailing(url, "/")
 

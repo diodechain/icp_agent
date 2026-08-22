@@ -102,4 +102,22 @@ defmodule ICPAgentTest do
     w = Wallet.new()
     assert ICPAgent.wallet_from_pem(ICPAgent.wallet_private_pem(w)) == w
   end
+
+  for host <- ICPAgent.boundary_hosts() do
+    test "boundary host #{host} responds to /api/v2/status" do
+      System.put_env("ICP_DOMAIN", unquote(host))
+
+      try do
+        assert %{"replica_health_status" => "healthy", "root_key" => root_key} =
+                 ICPAgent.status()
+
+        assert %CBOR.Tag{tag: :bytes, value: key} = root_key
+        # The DFX root key is 134 bytes; if we got one back the host is serving
+        # the real ICP API rather than some placeholder or error page.
+        assert is_binary(key) and byte_size(key) > 0
+      after
+        System.delete_env("ICP_DOMAIN")
+      end
+    end
+  end
 end
