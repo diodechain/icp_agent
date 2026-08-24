@@ -1,4 +1,4 @@
-defmodule ICPAgentTest do
+defmodule ICPAgent.IntegrationTest do
   alias DiodeClient.Wallet
   use ExUnit.Case
   doctest ICPAgent

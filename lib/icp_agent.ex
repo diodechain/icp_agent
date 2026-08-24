@@ -53,6 +53,7 @@ defmodule ICPAgent do
   - Did files are not supported and instead types for a call/query must be manually specified.
   """
   require Logger
+  require Req
   alias DiodeClient.Wallet
 
   def default_canister_id do
@@ -195,7 +196,7 @@ defmodule ICPAgent do
     if retries > 10 do
       {:error, "Call timed out"}
     else
-      Process.sleep(1000)
+      poll_sleep()
 
       read_state(canister_id, wallet, [["request_status", cbor_bytes(request_id), "reply"]])
       |> case do
@@ -309,6 +310,7 @@ defmodule ICPAgent do
     {:error, %Req.TransportError{reason: :nxdomain}}
   end
 
+
   defp fetch_with_fallback([base | rest], path, now, opayload, payload, opts) do
     url = base <> path
 
@@ -335,22 +337,35 @@ defmodule ICPAgent do
     # ICP native timeout is 20 seconds, we use 30 seconds to account for network latency and clock drift
     timeout = 30_000
     method = opts[:method] || :post
-    retry = opts[:retry] || :transient
+    retry = opts[:retry] || Application.get_env(:icp_agent, :req_retry, :transient)
+    plug = opts[:plug] || Application.get_env(:icp_agent, :req_plug)
 
-    req_opts = [
-      url: url,
-      method: method,
-      retry: retry,
-      receive_timeout: timeout,
-      connect_options: [timeout: timeout],
-      headers: [content_type: "application/cbor"]
-    ]
+    req_opts =
+      [
+        url: url,
+        method: method,
+        retry: retry,
+        receive_timeout: timeout,
+        connect_options: [timeout: timeout],
+        headers: [content_type: "application/cbor"]
+      ]
+      |> maybe_add_plug(plug)
 
     case method do
       :get -> Req.new(req_opts)
       :post -> Req.new([body: payload] ++ req_opts)
     end
     |> Req.request()
+  end
+
+  defp maybe_add_plug(req_opts, nil), do: req_opts
+  defp maybe_add_plug(req_opts, plug), do: [{:plug, plug} | req_opts]
+
+  @poll_sleep_ms 1_000
+  defp poll_sleep, do: Process.sleep(poll_sleep_ms())
+
+  defp poll_sleep_ms do
+    Application.get_env(:icp_agent, :poll_sleep_ms, @poll_sleep_ms)
   end
 
   defp process_response({:ok, ret}, now, method, payload, path) do

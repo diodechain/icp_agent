@@ -54,7 +54,9 @@ defmodule ICPAgent.MixProject do
       {:req, "~> 0.5.8"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.3", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.25.0", only: :dev}
+      {:ex_doc, "~> 0.25.0", only: :dev},
+      {:muex, "~> 0.8", only: [:dev, :test], runtime: false},
+      {:plug, "~> 1.16", only: :test}
     ]
   end
 end
