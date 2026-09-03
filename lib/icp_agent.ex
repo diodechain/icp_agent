@@ -499,7 +499,7 @@ defmodule ICPAgent do
   def wallet_from_pem(pem) do
     [{:ECPrivateKey, der, _}] = :public_key.pem_decode(pem)
 
-    {:ECPrivateKey, 1, privkey, {:namedCurve, {1, 3, 132, 0, 10}}, pubkey, :asn1_NOVALUE} =
+    {:ECPrivateKey, _version, privkey, {:namedCurve, {1, 3, 132, 0, 10}}, pubkey, :asn1_NOVALUE} =
       :public_key.der_decode(:ECPrivateKey, der)
 
     wallet = Wallet.from_privkey(privkey)
