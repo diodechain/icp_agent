@@ -20,6 +20,7 @@ jobs:
       with:
         elixir-version: ${{ matrix.elixir }}
         otp-version: ${{ matrix.otp }}
+        version-type: strict
 
     - run: |
         mix deps.get
