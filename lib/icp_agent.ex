@@ -462,12 +462,22 @@ defmodule ICPAgent do
   def wallet_der(wallet) do
     public = Wallet.pubkey_long!(wallet)
 
-    term =
-      {:OTPSubjectPublicKeyInfo,
-       {:PublicKeyAlgorithm, {1, 2, 840, 10_045, 2, 1}, {:namedCurve, {1, 3, 132, 0, 10}}},
-       public}
+    if :erlang.system_info(:otp_release) |> List.to_integer() >= 28 do
+      curve = :public_key.der_encode(:EcpkParameters, {:namedCurve, {1, 3, 132, 0, 10}})
 
-    :public_key.pkix_encode(:OTPSubjectPublicKeyInfo, term, :otp)
+      :public_key.der_encode(
+        :SubjectPublicKeyInfo,
+        {:SubjectPublicKeyInfo,
+         {:SubjectPublicKeyInfo_algorithm, {1, 2, 840, 10_045, 2, 1}, curve}, public}
+      )
+    else
+      term =
+        {:OTPSubjectPublicKeyInfo,
+         {:PublicKeyAlgorithm, {1, 2, 840, 10_045, 2, 1}, {:namedCurve, {1, 3, 132, 0, 10}}},
+         public}
+
+      :public_key.pkix_encode(:OTPSubjectPublicKeyInfo, term, :otp)
+    end
   end
 
   def wallet_private_pem(wallet) do
