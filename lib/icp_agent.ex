@@ -463,12 +463,11 @@ defmodule ICPAgent do
     public = Wallet.pubkey_long!(wallet)
 
     if :erlang.system_info(:otp_release) |> List.to_integer() >= 28 do
-      curve = :public_key.der_encode(:EcpkParameters, {:namedCurve, {1, 3, 132, 0, 10}})
-
       :public_key.der_encode(
         :SubjectPublicKeyInfo,
         {:SubjectPublicKeyInfo,
-         {:SubjectPublicKeyInfo_algorithm, {1, 2, 840, 10_045, 2, 1}, curve}, public}
+         {:SubjectPublicKeyInfo_algorithm, {1, 2, 840, 10_045, 2, 1},
+          {:namedCurve, {1, 3, 132, 0, 10}}}, public}
       )
     else
       term =
