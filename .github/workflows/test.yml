@@ -3,16 +3,23 @@ on: ["push", "pull_request"]
 
 jobs:
   test_and_build:
-    name: "Compile & Lint"
+    name: "Compile & Lint (OTP ${{ matrix.otp }})"
     runs-on: "ubuntu-latest"
+    strategy:
+      matrix:
+        include:
+        - otp: "27.2.5"
+          elixir: "1.17.3"
+        - otp: "28.0.2"
+          elixir: "1.18.1"
     steps:
     - uses: actions/checkout@v1
     
     - name: Setup elixir
       uses: erlef/setup-beam@v1
       with:
-        version-file: .tool-versions
-        version-type: strict
+        elixir-version: ${{ matrix.elixir }}
+        otp-version: ${{ matrix.otp }}
 
     - run: |
         mix deps.get
